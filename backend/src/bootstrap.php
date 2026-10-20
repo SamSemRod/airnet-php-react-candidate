@@ -8,9 +8,30 @@ set_error_handler(function ($severity, $message, $file, $line) {
     throw new ErrorException($message, 0, $severity, $file, $line);
 });
 set_exception_handler(function (Throwable $error) {
+    if ($error instanceof ApiError) {
+        respond($error->status, array('error' => $error->error, 'message' => $error->getMessage()));
+    }
     error_log((string) $error);
     respond(500, array('error' => 'internal_error', 'message' => 'Не удалось обработать запрос'));
 });
+
+// Максимум типа integer в PostgreSQL: большие id не существуют, а не ломают запрос.
+const PG_INT_MAX = 2147483647;
+
+// Ожидаемая ошибка API. В отличие от respond() не завершает скрипт сразу,
+// поэтому позволяет откатить транзакцию до ответа.
+class ApiError extends RuntimeException
+{
+    public $status;
+    public $error;
+
+    public function __construct($status, $error, $message)
+    {
+        parent::__construct($message);
+        $this->status = $status;
+        $this->error = $error;
+    }
+}
 session_name('assessment_session');
 session_set_cookie_params(array('httponly' => true, 'samesite' => 'Lax', 'path' => '/'));
 session_start();

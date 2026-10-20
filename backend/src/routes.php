@@ -41,20 +41,28 @@ if (preg_match('~^/api/tickets/([1-9][0-9]*)$~', $path, $matches) && $method ===
     if (getenv('DEMO_LATENCY') === '1') {
         usleep($id === 101 ? 1100000 : 100000);
     }
-    $ticket = $repository->find($id);
+    $ticket = $id > PG_INT_MAX ? null : $repository->find($id);
     if (!$ticket) {
         respond(404, array('error' => 'not_found', 'message' => 'Заявка не найдена'));
     }
     respond(200, array('ticket' => $ticket, 'history' => $repository->history($id)));
 }
 if (preg_match('~^/api/tickets/([1-9][0-9]*)/source$~', $path, $matches) && $method === 'POST') {
+    // Право проверяется до чтения заявки и тела запроса; полномочия берутся только из серверной сессии.
+    requirePermission($employee, 'FUNC_TICKETS_SOURCE_EDIT');
     requireCsrf();
-    $body = requestBody();
-    $sourceId = isset($body['source_id']) ? $body['source_id'] : null;
-    if (!is_int($sourceId) || $sourceId <= 0) {
-        respond(400, array('error' => 'invalid_source', 'message' => 'Выберите источник из справочника'));
+    $id = (int) $matches[1];
+    if ($id > PG_INT_MAX) {
+        respond(404, array('error' => 'not_found', 'message' => 'Заявка не найдена'));
     }
-    $ticket = $repository->changeSource((int) $matches[1], $sourceId, $employee);
+    // Некорректный ввод (не JSON, нет поля, строка, дробь, null...) превращается в null,
+    // а 400 возвращает репозиторий после проверок заявки и архива.
+    $body = json_decode(file_get_contents('php://input'), true);
+    $sourceId = is_array($body) && isset($body['source_id']) ? $body['source_id'] : null;
+    if (!is_int($sourceId) || $sourceId <= 0 || $sourceId > PG_INT_MAX) {
+        $sourceId = null;
+    }
+    $ticket = $repository->changeSource($id, $sourceId, $employee);
     respond(200, array('ticket' => $ticket, 'history' => $repository->history($ticket['id'])));
 }
 respond(404, array('error' => 'not_found', 'message' => 'Маршрут не найден'));

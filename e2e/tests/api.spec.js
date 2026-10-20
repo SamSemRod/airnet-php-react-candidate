@@ -75,6 +75,7 @@ test.describe('Проверка нового источника', () => {
     ['boolean', { source_id: true }],
     ['массив', { source_id: [2] }],
     ['неизвестный id', { source_id: 99 }],
+    ['вне диапазона integer', { source_id: 2147483648 }],
     ['не JSON', 'source_id=2'],
     ['JSON не объект', '[2]'],
   ];
@@ -156,6 +157,11 @@ test.describe('Успешная смена источника', () => {
 test.describe('Прочие ошибки', () => {
   test('нет заявки при просмотре — 404 JSON', async ({ viewer }) => {
     await expectJsonError(await viewer.get('/tickets/999'), 404);
+  });
+
+  test('id заявки вне диапазона integer — 404, а не 500', async ({ viewer, editor }) => {
+    await expectJsonError(await viewer.get('/tickets/99999999999'), 404);
+    await expectJsonError(await editor.changeSource(99999999999, { source_id: 2 }), 404);
   });
 
   test('неизвестный маршрут — 404 JSON', async ({ viewer }) => {
