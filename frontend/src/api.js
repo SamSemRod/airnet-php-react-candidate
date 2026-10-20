@@ -10,7 +10,8 @@ export async function api(path, options = {}) {
     ...options,
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf, ...options.headers },
   });
-  const data = await response.json();
+  // Ответ прокси или сервера может быть не JSON (например, 502) — показываем HTTP-статус.
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(data.message || `HTTP ${response.status}`);
     error.status = response.status;

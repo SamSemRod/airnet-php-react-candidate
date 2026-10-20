@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 
 export default function TicketPanel({ employee, selectedId, sources, onChanged }) {
@@ -9,35 +9,46 @@ export default function TicketPanel({ employee, selectedId, sources, onChanged }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  // Какая заявка выбрана сейчас: ответы по другим заявкам не должны менять карточку.
+  const selectedRef = useRef(selectedId);
 
   useEffect(() => {
-    if (!selectedId) {
-      setTicket(null);
-      return;
-    }
-    setLoading(true);
+    selectedRef.current = selectedId;
+    setTicket(null);
+    setHistory([]);
     setError('');
     setMessage('');
+    if (!selectedId) return;
+    let active = true;
+    setLoading(true);
     api(`/tickets/${selectedId}`).then(data => {
+      if (!active) return;
       setTicket(data.ticket);
       setHistory(data.history);
       setSourceId(String(data.ticket.source?.id ?? ''));
-    }).catch(error => setError(error.message)).finally(() => setLoading(false));
+    }).catch(error => {
+      if (active) setError(error.message);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
   }, [selectedId]);
 
   async function save() {
     if (!ticket || saving) return;
+    const savedId = ticket.id;
     setSaving(true);
     setError('');
     setMessage('');
     try {
-      const data = await api(`/tickets/${ticket.id}/source`, { method: 'POST', body: JSON.stringify({ source_id: Number(sourceId) }) });
+      const data = await api(`/tickets/${savedId}/source`, { method: 'POST', body: JSON.stringify({ source_id: Number(sourceId) }) });
+      onChanged(data.ticket);
+      if (selectedRef.current !== savedId) return;
       setTicket(data.ticket);
       setHistory(data.history);
       setMessage('Источник сохранён');
-      onChanged(data.ticket);
     } catch (error) {
-      setError(error.message);
+      if (selectedRef.current === savedId) setError(error.message);
     } finally {
       setSaving(false);
     }
